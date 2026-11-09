@@ -24,8 +24,8 @@ class ServiceConfig : public settings::ObjectNode {
     CONFIG_NODE(ServiceConfig, settings::ObjectNode)
 
     CONFIG_GLOBAL_PROPERTY(QString, weatherLocation, {})
-    // Auto guesses based on locale
-    CONFIG_GLOBAL_ENUM_PROPERTY(TemperatureUnit, weatherUnits, TemperatureUnit::Auto)
+    // Default to Celsius
+    CONFIG_GLOBAL_ENUM_PROPERTY(TemperatureUnit, weatherUnits, TemperatureUnit::Celsius)
     // Always Celsius by default cause apparently even imperial system users don't use Fahrenheit for perf temps?
     CONFIG_GLOBAL_ENUM_PROPERTY(TemperatureUnit, sensorUnits, TemperatureUnit::Celsius)
     // Binary (KiB/MiB/GiB) or decimal (KB/MB/GB) data sizes

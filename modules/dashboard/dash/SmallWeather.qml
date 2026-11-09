@@ -1,60 +1,86 @@
 import QtQuick
+import Caelestia
 import Caelestia.Config
 import qs.components
+import qs.components.widgets
 import qs.services
 
 Item {
     id: root
 
-    anchors.centerIn: parent
+    anchors.fill: parent
 
-    implicitWidth: icon.implicitWidth + info.implicitWidth + info.anchors.leftMargin
+    implicitWidth: Tokens.sizes.dashboard.weatherWidth
     implicitHeight: Math.max(icon.implicitHeight, info.implicitHeight) + Tokens.padding.largeIncreased * 2
 
     Component.onCompleted: Weather.reload()
 
-    MaterialIcon {
-        id: icon
-
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: parent.left
-
-        animate: true
-        text: Weather.icon
-        color: Colours.palette.m3secondary
-        fontStyle: Tokens.font.icon.builders.extraLarge.scale(1.6).build()
+    StateLayer {
+        anchors.fill: parent
+        cursorShape: Qt.PointingHandCursor
+        onClicked: Weather.toggleUnit()
     }
 
-    Column {
-        id: info
+    Item {
+        id: content
 
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.left: icon.right
-        anchors.leftMargin: Tokens.spacing.largeIncreased
+        anchors.centerIn: parent
+        implicitWidth: icon.implicitWidth + info.implicitWidth + info.anchors.leftMargin
+        implicitHeight: Math.max(icon.implicitHeight, info.implicitHeight)
 
-        spacing: Tokens.spacing.extraSmall
+        MaterialIcon {
+            id: icon
 
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
-
-            animate: true
-            text: Weather.temp
-            color: Colours.palette.m3primary
-            font: Tokens.font.headline.builders.medium.width(110).weight(Font.DemiBold).build()
-        }
-
-        StyledText {
-            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
 
             animate: true
-            text: Weather.description
-            font: Tokens.font.body.small
-
-            elide: Text.ElideRight
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            horizontalAlignment: Text.AlignHCenter
-            width: Math.min(implicitWidth, root.parent.width - icon.implicitWidth - info.anchors.leftMargin - Tokens.padding.extraLargeIncreased)
+            text: Weather.icon
+            color: Colours.palette.m3secondary
+            fontStyle: Tokens.font.icon.builders.extraLarge.scale(1.6).build()
         }
+
+        Column {
+            id: info
+
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: icon.right
+            anchors.leftMargin: Tokens.spacing.largeIncreased
+
+            spacing: Tokens.spacing.extraSmall
+
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                animate: true
+                text: Weather.temp
+                color: Colours.palette.m3primary
+                font: Tokens.font.headline.builders.medium.width(110).weight(Font.DemiBold).build()
+            }
+
+            StyledText {
+                anchors.horizontalCenter: parent.horizontalCenter
+
+                animate: true
+                text: Weather.description
+                font: Tokens.font.body.small
+
+                elide: Text.ElideRight
+                wrapMode: Text.WordWrap
+                maximumLineCount: 2
+                horizontalAlignment: Text.AlignHCenter
+                width: Math.min(implicitWidth, root.width - icon.implicitWidth - info.anchors.leftMargin - Tokens.padding.extraLargeIncreased)
+            }
+        }
+    }
+
+    WeatherUnitToggle {
+        id: unitToggle
+
+        compact: true
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: Tokens.padding.small
+        z: 2
     }
 }
