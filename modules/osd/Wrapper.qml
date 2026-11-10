@@ -74,8 +74,14 @@ Item {
 
     Connections {
         function onBrightnessChanged(): void {
-            root.show();
+            if (root.monitor?.ready)
+                root.show();
             root.brightness = root.monitor?.brightness ?? 0;
+        }
+
+        function onExternalBrightnessChanged(): void {
+            if (root.monitor?.ready)
+                root.show();
         }
 
         target: root.monitor

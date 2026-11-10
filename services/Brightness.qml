@@ -172,17 +172,80 @@ Singleton {
         readonly property bool isAppleDisplay: root.appleDisplayPresent && modelData.model.startsWith("StudioDisplay")
         property real brightness
         property real queuedBrightness: NaN
+        property string backlightDevice: ""
+        property int maxBrightness: 0
+        property bool ready: false
+        property bool pendingBacklightReload: false
+        property bool pendingSyncReload: false
+        property real lastInternalWriteTime: 0
 
         readonly property Process initProc: Process {
             stdout: StdioCollector {
                 onStreamFinished: {
                     if (monitor.isAppleDisplay) {
-                        const val = parseInt(text.trim());
-                        monitor.brightness = val / 101;
+                        monitor.backlightDevice = "";
+                        monitor.maxBrightness = 0;
+                        const val = parseInt(text.trim(), 10);
+                        if (!isNaN(val))
+                            monitor.brightness = val / 101;
+                    } else if (monitor.isDdc) {
+                        monitor.backlightDevice = "";
+                        monitor.maxBrightness = 0;
+                        const [, , , cur, max] = text.trim().split(" ");
+                        const curNum = parseInt(cur, 10);
+                        const maxNum = parseInt(max, 10);
+                        if (!isNaN(curNum) && !isNaN(maxNum) && maxNum > 0)
+                            monitor.brightness = curNum / maxNum;
                     } else {
-                        const [, , , cur, max] = text.split(" ");
-                        monitor.brightness = parseInt(cur) / parseInt(max);
+                        const [device, , cur, , max] = text.trim().split(",");
+                        const curNum = parseInt(cur, 10);
+                        const maxNum = parseInt(max, 10);
+                        if (device && !isNaN(curNum) && !isNaN(maxNum) && maxNum > 0) {
+                            monitor.maxBrightness = maxNum;
+                            monitor.backlightDevice = device;
+                            monitor.brightness = Math.max(0, Math.min(1, curNum / maxNum));
+                        } else {
+                            monitor.backlightDevice = "";
+                            monitor.maxBrightness = 0;
+                        }
                     }
+                    monitor.ready = true;
+                }
+            }
+        }
+
+        readonly property FileView backlightWatcher: FileView {
+            path: monitor.backlightDevice && !monitor.isDdc && !monitor.isAppleDisplay ? `/sys/class/backlight/${monitor.backlightDevice}/brightness` : ""
+            watchChanges: path.length > 0
+
+            onFileChanged: {
+                monitor.pendingBacklightReload = true;
+                reload();
+            }
+
+            onLoaded: {
+                const fromFileChange = monitor.pendingBacklightReload;
+                const fromSync = monitor.pendingSyncReload;
+                monitor.pendingBacklightReload = false;
+                monitor.pendingSyncReload = false;
+
+                if (!fromFileChange && !fromSync)
+                    return;
+
+                // Ignore intermediate sysfs echoes while Caelestia is driving brightness;
+                // syncTimer reconciles the settled hardware value afterward.
+                if (Date.now() - monitor.lastInternalWriteTime < 150)
+                    return;
+
+                const raw = parseInt(text().trim(), 10);
+                if (isNaN(raw) || monitor.maxBrightness <= 0)
+                    return;
+
+                const next = Math.max(0, Math.min(1, raw / monitor.maxBrightness));
+                if (Math.round(next * 100) !== Math.round(monitor.brightness * 100)) {
+                    monitor.brightness = next;
+                } else if (fromFileChange && monitor.ready) {
+                    monitor.externalBrightnessChanged();
                 }
             }
         }
@@ -197,6 +260,18 @@ Singleton {
             }
         }
 
+        readonly property Timer syncTimer: Timer {
+            interval: 200
+            onTriggered: {
+                if (monitor.backlightWatcher.path.length > 0) {
+                    monitor.pendingSyncReload = true;
+                    monitor.backlightWatcher.reload();
+                }
+            }
+        }
+
+        signal externalBrightnessChanged
+
         function setBrightness(value: real): void {
             value = Math.max(0, Math.min(1, value));
             const rounded = Math.round(value * 100);
@@ -210,15 +285,17 @@ Singleton {
 
             brightness = value;
 
-            if (isAppleDisplay)
+            if (isAppleDisplay) {
                 Quickshell.execDetached(["asdbctl", "set", rounded]);
-            else if (isDdc)
+            } else if (isDdc) {
                 Quickshell.execDetached(["ddcutil", "-b", busNum, "setvcp", "10", rounded]);
-            else
-                Quickshell.execDetached(["brightnessctl", "s", `${rounded}%`]);
-
-            if (isDdc)
                 timer.restart();
+            } else {
+                lastInternalWriteTime = Date.now();
+                const cmd = backlightDevice ? ["brightnessctl", "-d", backlightDevice, "s", `${rounded}%`] : ["brightnessctl", "s", `${rounded}%`];
+                Quickshell.execDetached(cmd);
+                syncTimer.restart();
+            }
         }
 
         function initBrightness(): void {
@@ -227,12 +304,13 @@ Singleton {
             else if (isDdc)
                 initProc.command = ["ddcutil", "-b", busNum, "getvcp", "10", "--brief"];
             else
-                initProc.command = ["sh", "-c", "echo a b c $(brightnessctl g) $(brightnessctl m)"];
+                initProc.command = ["brightnessctl", "-m", "-c", "backlight", "info"];
 
             initProc.running = true;
         }
 
         onBusNumChanged: initBrightness()
+        onIsAppleDisplayChanged: initBrightness()
         Component.onCompleted: initBrightness()
     }
 }
